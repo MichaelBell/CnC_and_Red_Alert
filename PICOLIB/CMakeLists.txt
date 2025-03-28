@@ -27,7 +27,8 @@ add_library(picolib STATIC
     ../SDLLIB/wsa.cpp
 
     # driver code borrows a lot from the 32blit-sdk
-    driver/display_dbi.cpp
+    driver/display_hstx.cpp
+    driver/dvi.c
     driver/filesystem.cpp
     driver/psram.c
     driver/storage.cpp
@@ -47,7 +48,7 @@ target_include_directories(picolib PRIVATE ${CMAKE_CURRENT_LIST_DIR}/driver)
 
 target_link_libraries(picolib PUBLIC
     hardware_dma hardware_flash hardware_pio hardware_pwm
-    pico_stdlib
+    pico_stdlib pico_multicore
     tinyusb_host
 )
 

@@ -186,6 +186,9 @@ static void command(uint8_t command, size_t len = 0, const char *data = nullptr)
 }
 
 static void set_window(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+#if LCD_ROTATION == 180
+  y += 80;
+#endif
   uint32_t cols = __builtin_bswap32((x << 16) | (x + w - 1));
   uint32_t rows = __builtin_bswap32((y << 16) | (y + h - 1));
 
@@ -319,6 +322,8 @@ static void vsync_callback(uint gpio, uint32_t events) {
     do_render = true;
   }
 }
+
+void pre_init_display() {}
 
 void init_display() {
 #ifdef LCD_PIO_BASE

@@ -4,6 +4,7 @@
 #ifdef WIFI_ENABLED
 #include "pico/cyw43_arch.h"
 #endif
+#include <pico/multicore.h>
 #include "tusb.h"
 
 #include "display.h"
@@ -68,8 +69,15 @@ void update_mouse_state(int8_t x, int8_t y, bool left, bool right)
     }
 }
 
+void core1_main() {
+    init_display();
+    multicore_fifo_push_blocking(1);
+}
+
 void Pico_Init()
 {
+    pre_init_display();
+
     stdio_init_all();
 
     size_t psramSize = psram_init(PSRAM_CS_PIN);
@@ -87,7 +95,8 @@ void Pico_Init()
     tusb_init();
     printf("USB init\n");
 
-    init_display();
+    multicore_launch_core1(core1_main);
+    multicore_fifo_pop_blocking();
     printf("Display init\n");
 }
 

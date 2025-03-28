@@ -5,8 +5,8 @@
 #define SD_MISO 36
 #define SD_CS   32
 
-#define DISPLAY_WIDTH  240
-#define DISPLAY_HEIGHT 240
+#define DISPLAY_WIDTH  360
+#define DISPLAY_HEIGHT 200
 
 #define LCD_CS_PIN        20
 #define LCD_DC_PIN        22
@@ -19,3 +19,8 @@
 
 #define LCD_ROTATION 0
 #define LCD_MAX_CLOCK 20000000
+
+#define DVI_CLK_P 13
+#define DVI_D0_P 15
+#define DVI_D1_P 17
+#define DVI_D2_P 19
