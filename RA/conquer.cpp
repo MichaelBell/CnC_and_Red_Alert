@@ -125,6 +125,10 @@ extern WolapiObject* pWolapi;
 MPG_RESPONSE far __stdcall MpegCallback(MPG_CMD cmd, LPVOID data, LPVOID user);
 #endif
 
+#if PICO_BUILD
+#include "pico/platform/panic.h"
+#endif
+
 #define SHAPE_TRANS		0x40
 
 void * Get_Shape_Header_Data(void * ptr);
@@ -2720,7 +2724,9 @@ void Rebuild_Interpolated_Palette(unsigned char * interpal)
 	}
 }
 
-
+#if PICO_BUILD
+__attribute__((section(".psram_data"))) unsigned char InterpolatedPalettesBuf[1024 * 1024];
+#endif
 unsigned char 	* InterpolatedPalettes[100];
 bool				PalettesRead;
 unsigned			PaletteCounter;
@@ -2774,7 +2780,13 @@ int Load_Interpolated_Palettes(char const * filename, bool add)
 		file.Read(&num_palettes , 4);
 
 		for (i=0; i < num_palettes; i++) {
+			#if PICO_BUILD
+			// Just hack this unreasonable allocation into PSRAM.
+			if (i >= 16) panic("Not enough interpolated palette mem");
+			InterpolatedPalettes[i+start_palette] = &InterpolatedPalettesBuf[65536*i];
+			#else
 			InterpolatedPalettes[i+start_palette] = (unsigned char *)malloc (65536);
+			#endif
 			memset (InterpolatedPalettes[i+start_palette], 0, 65536);
 			for (int y = 0; y < 256; y++) {
 				file.Read (InterpolatedPalettes[i+start_palette] + y*256 , y+1);
@@ -2795,7 +2807,9 @@ void Free_Interpolated_Palettes(void)
 {
 	for (int i = 0; i < ARRAY_SIZE(InterpolatedPalettes) ;i++) {
 		if (InterpolatedPalettes[i]) {
+			#if !PICO_BUILD
 			free(InterpolatedPalettes[i]);
+			#endif
 			InterpolatedPalettes[i]=NULL;
 		}
 	}
