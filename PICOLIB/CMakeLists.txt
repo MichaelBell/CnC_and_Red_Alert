@@ -51,11 +51,17 @@ target_link_libraries(picolib PUBLIC
     tinyusb_host
 )
 
+if (PICO_CYW43_SUPPORTED)
+    target_link_libraries(picolib PUBLIC
+        pico_cyw43_arch_lwip_threadsafe_background
+    )
+endif()
+
 target_compile_definitions(picolib PUBLIC
     # Using a Qw/ST connector as a UART...
     PICO_DEFAULT_UART=1
-    PICO_DEFAULT_UART_TX_PIN=4
-    PICO_DEFAULT_UART_RX_PIN=5
+    PICO_DEFAULT_UART_TX_PIN=38
+    PICO_DEFAULT_UART_RX_PIN=39
     PICO_CORE1_STACK_SIZE=0x200
 )
 

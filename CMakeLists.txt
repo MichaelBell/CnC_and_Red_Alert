@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.12)
 
+if (DEFINED ENV{PICO_SDK_PATH} AND (NOT PICO_SDK_PATH))
+    set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
+    message("Using PICO_SDK_PATH from environment ('${PICO_SDK_PATH}')")
+endif ()
+set (PICO_BOARD pimoroni_pico_plus2_rp2350)
+
 if(PICO_SDK_PATH)
     include(PICOLIB/pico_sdk_import.cmake)
 endif()
@@ -23,10 +29,10 @@ else()
     # for noise
     add_compile_options(-Wno-write-strings)
     # workarounds
-    add_compile_definitions(-D__cdecl= -D__far= -D__stdcall= -Dcdecl= -Dfar=)
+    add_compile_definitions(__cdecl= __far= __stdcall= cdecl= far=)
 endif()
 
-add_compile_definitions(-DWIN32) # hopefully easier than DOS
+add_compile_definitions(WIN32) # hopefully easier than DOS
 
 
 add_subdirectory(port)

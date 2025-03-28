@@ -76,14 +76,19 @@ void Pico_Init()
     printf("detected %i bytes PSRAM\n", psramSize);
     PSRAM_Alloc_Init();
 
-    f_mount(&fs, "", 0);
-    f_chdir("/CnC/");
+    FRESULT res = f_mount(&fs, "", 0);
+    printf("Mount: %d\n");
+    res = f_chdir("/CnC/");
+    printf("Chdir: %d\n");
 
     Pico_Flash_Cache_Init();
+    printf("Flash cache init\n");
 
     tusb_init();
+    printf("USB init\n");
 
     init_display();
+    printf("Display init\n");
 }
 
 void Pico_Wifi_Init(const char *ssid, const char *pass)

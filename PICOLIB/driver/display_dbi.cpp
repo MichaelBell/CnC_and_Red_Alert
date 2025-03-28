@@ -95,8 +95,18 @@ static inline void transpose_data(const uint16_t *in, uint16_t *out, int count, 
 
 // palette lookup
 static inline void convert_paletted(const uint8_t *in, uint16_t *out, int count) {
-  for(int i = 0; i < count; i++)
+#if DISPLAY_WIDTH != 320
+  in += (320 - DISPLAY_WIDTH) / 2;
+#endif
+  for(int i = 0; i < count; i++) {
     *out++ = screen_palette565[*in++];
+#if DISPLAY_WIDTH != 320
+    if (i == DISPLAY_WIDTH) {
+      in += 320 - DISPLAY_WIDTH;
+    }
+#endif
+  }
+    
 }
 
 static void __isr palette_dma_irq_handler() {
@@ -116,7 +126,7 @@ static void __isr palette_dma_irq_handler() {
     if(++cur_scanline >= win_h)
       return;
 
-    auto in = (uint8_t *)frame_buffer + (cur_scanline) * win_w;
+    auto in = (uint8_t *)frame_buffer + (cur_scanline) * 320;
     auto out = (uint16_t *)temp_buffer + (palette_buf_idx ^ 1) * win_w;
     convert_paletted(in, out, win_w);
   }
@@ -311,6 +321,10 @@ static void vsync_callback(uint gpio, uint32_t events) {
 }
 
 void init_display() {
+#ifdef LCD_PIO_BASE
+  pio_set_gpio_base(pio, LCD_PIO_BASE);
+#endif
+
   // configure pins
   gpio_set_function(LCD_DC_PIN, GPIO_FUNC_SIO);
   gpio_set_dir(LCD_DC_PIN, GPIO_OUT);
