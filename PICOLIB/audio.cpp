@@ -318,8 +318,9 @@ void Sound_Callback(void)
 
 struct repeating_timer audio_timer;
 
+static bool audio_initialized = false;
 static uint8_t sample_counter = 0;
-static uint8_t next_sample = 0x80;
+static uint16_t next_sample = 0x100;
 static int16_t mixed_samples[256];
 static bool repeating_timer_callback(__unused struct repeating_timer *t) {
     pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, next_sample);
@@ -348,39 +349,15 @@ static bool repeating_timer_callback(__unused struct repeating_timer *t) {
         }
     }
 
-    next_sample = combined_sample >> 8;
+    next_sample = combined_sample >> 7;
     return true;
 }
 
 bool Audio_Init(void * window, int bits_per_sample, bool stereo, int rate, int reverse_channels)
 {
-    /*SDL_AudioSpec desired;
-    desired.freq = rate;
-    desired.format = AUDIO_S16; //bits_per_sample == 16 ? AUDIO_S16 : AUDIO_S8;
-    desired.channels = stereo ? 2 : 1;
-    desired.samples = 2048;
-    desired.callback = SDL_Audio_Callback;
-
-    // don't allow format change so I need less mising code
-    int changes = SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE | SDL_AUDIO_ALLOW_SAMPLES_CHANGE;
-    AudioDevice = SDL_OpenAudioDevice(NULL, false, &desired, &ObtainedSpec, changes);
-
-    if(!AudioDevice)
-    {
-        printf("Audio_Init: %s\n", SDL_GetError());
-        return false;
-    }
-
-    MixBuffer = new uint8_t[ObtainedSpec.size];
-
-    SDL_PauseAudioDevice(AudioDevice, false);
-
     SoundType = SFX_SDL;
     SampleType = SAMPLE_SDL;
-    return true;*/
-
-    SoundType = SFX_SDL;
-    SampleType = SAMPLE_SDL;
+    audio_initialized = true;
 
     int16_t* stream_mem = psram_sample_buffers;
     for(auto &chan : Channels)
@@ -390,9 +367,9 @@ bool Audio_Init(void * window, int bits_per_sample, bool stereo, int rate, int r
     }
 
     pwm_config c = pwm_get_default_config();
-    pwm_config_set_wrap(&c, 0xfe);
+    pwm_config_set_wrap(&c, 0x1fe);
     pwm_init(PWM_AUDIO_SLICE, &c, true);
-    pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, 0x80);
+    pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, 0x100);
     gpio_set_function(PWM_AUDIO_PIN, GPIO_FUNC_PWM);
 
     add_repeating_timer_us(1000000 / rate, repeating_timer_callback, NULL, &audio_timer);
@@ -404,6 +381,7 @@ void Sound_End(void)
 {
     cancel_repeating_timer(&audio_timer);
     pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, 0x80);
+    audio_initialized = false;
 }
 
 void Stop_Sample(int handle)
@@ -566,7 +544,7 @@ int Get_Free_Sample_Handle(int priority)
 int Get_Digi_Handle(void)
 {
     // used to check if audio is initialised
-    return /*AudioDevice ? 1 :*/ -1;
+    return audio_initialized ? 1 : -1;
 }
 
 bool Start_Primary_Sound_Buffer(bool forced)

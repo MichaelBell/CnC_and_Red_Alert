@@ -116,6 +116,11 @@ extern "C"{
 	void __cdecl Force_VM_Page_In (void *buffer, int length);
 }
 
+#if VQAPICO_SOUND
+__attribute__((section(".psram_data"))) unsigned char StaticAudioBuf[65536];
+bool StaticAudioBufInUse = false;
+#endif
+
 /****************************************************************************
 *
 * NAME
@@ -524,7 +529,7 @@ long VQA_Open(VQAHandle *vqa, char const *filename, VQAConfig *config)
 	}
 
 	/* Turn off audio if the HMI DigiHandle is invalid. */
-#if (!VQADIRECT_SOUND) && !VQASDL_SOUND && !VQA_PICOSOUND
+#if (!VQADIRECT_SOUND) && !VQASDL_SOUND && !VQAPICO_SOUND
 	if (config->DigiHandle == -1) {
 		config->OptionFlags &= ~VQAOPTF_AUDIO;
 	}
@@ -1562,7 +1567,14 @@ static VQAData *AllocBuffers(VQAHeader *header, VQAConfig *config)
 			 * Otherwise, use the user supplied buffer.
 			 */
 			if (config->AudioBuf == NULL) {
+#if VQAPICO_SOUND
+				if (!StaticAudioBufInUse) {
+					audio->Buffer = StaticAudioBuf;
+					StaticAudioBufInUse = true;
+				}
+#else
 				audio->Buffer = (unsigned char *)malloc(config->AudioBufSize);
+#endif
 
 				/* If failure then clean up and exit. */
 				if (audio->Buffer == NULL) {
@@ -1705,7 +1717,11 @@ static void FreeBuffers(VQAData *vqa, VQAConfig *config, VQAHeader *header)
 #if (!VQADIRECT_SOUND)
 		DPMI_Unlock(vqa->Audio.Buffer, config->AudioBufSize);
 #endif	//(!VQADIRECT_SOUND)
+#if VQAPICO_SOUND
+		StaticAudioBufInUse = false;
+#else
 		free(vqa->Audio.Buffer);
+#endif
 	}
 
 	/* Free the audio segments loaded flag array. */

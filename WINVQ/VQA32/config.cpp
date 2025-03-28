@@ -76,7 +76,7 @@ static VQAConfig _defaultconfig = {
 	/* NotifyFlags: Flags representing the events the client wishes to be
 	 * notified about during playback.
 	 */
-	NULL,
+	0,
 
 	/* Vmode: Video mode to use. */
 	MCGA,
@@ -129,6 +129,9 @@ static VQAConfig _defaultconfig = {
 	NULL, // AudioCallback
 	NULL, // AudioSpec
 #endif
+#if VQAPICO_SOUND
+	NULL, // AudioCallback
+#endif
 #if (VQADIRECT_SOUND)
 	/* -----------------12/15/95 10:40AM-----------------
 	 * SoundObject - ptr to games direct sound object. Null if VQ should create
@@ -155,7 +158,11 @@ static VQAConfig _defaultconfig = {
 	 * tells the player to compute the buffer size from the audio
 	 * information in the movie.
 	 */
+#if VQAPICO_SOUND
+	65536,
+#else
 	-1,
+#endif
 
 	/* AudioRate: Audio playback rate in samples per second. A value of -1
 	 * tells the player to use the audio rate of the movie.

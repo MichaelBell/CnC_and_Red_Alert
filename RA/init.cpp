@@ -1701,6 +1701,7 @@ void Anim_Init(void)
 		AnimControl.OptionFlags |= VQAOPTF_SLOWPAL;
 	}
 #if defined(PICO_BUILD)
+	AnimControl.AudioCallback = Get_Audio_Callback_Ptr();
 #elif defined(PORTABLE)
 	AnimControl.AudioDeviceID = Get_Audio_Device();
 	AnimControl.AudioCallback = Get_Audio_Callback_Ptr();
