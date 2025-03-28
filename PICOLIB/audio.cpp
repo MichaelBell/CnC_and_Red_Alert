@@ -2,12 +2,23 @@
 #include <cassert>
 #include <cstring>
 
+#include <hardware/pwm.h>
+#include <hardware/gpio.h>
+#include <pico/time.h>
+
 #include "audio.h"
 #include "file.h"
+
+#include "driver/config.h"
 
 // original code has 5 for windows, 4 for dos
 // effectively one less as one is used to track streaming from disk
 #define	MAX_SFX	4
+
+#define STREAM_BASE 0x11700000
+#define STREAM_SAMPLES 0x2000
+
+__attribute__((section(".psram_data"))) int16_t psram_sample_buffers[MAX_SFX * STREAM_SAMPLES];
 
 enum SCompressType : uint8_t
 {
@@ -49,6 +60,10 @@ static AudioCallback ExtraCallback = NULL;
 struct ChannelState
 {
     const void *sample = NULL;
+    int16_t* stream_samples = NULL;
+    uint16_t stream_in = 0;
+    uint16_t stream_out = 0;
+
 //    SDL_AudioStream *stream = NULL;
     bool playing = false;
     int priority = 0;
@@ -88,7 +103,8 @@ static uint8_t *DecodeADPCMBlock(ChannelState &chan, int block_size, uint8_t *in
 
     for(int i = 0; i < block_size; i++)
     {
-        int16_t samples[2];
+        int16_t* samples = &chan.stream_samples[chan.stream_in];
+        chan.stream_in = (chan.stream_in + 2) & (STREAM_SAMPLES - 1);
         auto b = *in_ptr++;
 
         int nibble = b & 0xF;
@@ -117,7 +133,7 @@ static uint8_t *DecodeADPCMBlock(ChannelState &chan, int block_size, uint8_t *in
 
 static bool RefillStream(ChannelState &chan)
 {
-    uint32_t max_update = 0;//ObtainedSpec.samples; // assume the target rate is not lower
+    uint32_t max_update = STREAM_SAMPLES / 2;
 
     if(chan.offset == chan.length)
         return false;
@@ -242,8 +258,14 @@ void Sound_Callback(void)
     // update file stream
     for(auto &chan : Channels)
     {
-        if(chan.file_handle == -1)
+        if(chan.file_handle == -1) {
+            if (chan.playing && chan.fade) {
+                chan.raw_volume -= chan.fade;
+                if (chan.raw_volume <= 0) chan.playing = false;
+                else chan.volume = Calculate_Volume(chan.raw_volume);
+            }
             continue;
+        }
 
         if(!chan.playing)
         {
@@ -259,6 +281,8 @@ void Sound_Callback(void)
         //int max_buf = (SDL_AUDIO_BITSIZE(ObtainedSpec.format) / 8) * ObtainedSpec.channels * ObtainedSpec.freq;
         //if(SDL_AudioStreamAvailable(chan.stream) >= max_buf)
         //    continue;
+        if (((chan.stream_in - chan.stream_out) & (STREAM_SAMPLES - 1)) >= STREAM_SAMPLES / 2)
+            continue;
         
         uint16_t block_header[4];
         if(Read_File(chan.file_handle, block_header, 8) !=8)
@@ -292,6 +316,42 @@ void Sound_Callback(void)
     }
 }
 
+struct repeating_timer audio_timer;
+
+static uint8_t sample_counter = 0;
+static uint8_t next_sample = 0x80;
+static int16_t mixed_samples[256];
+static bool repeating_timer_callback(__unused struct repeating_timer *t) {
+    pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, next_sample);
+
+    if (sample_counter == 0) {
+        memset(mixed_samples, 0, 512);
+        // let VQA do its thing
+        if(ExtraCallback)
+            ExtraCallback((uint8_t*)mixed_samples, 512);
+    }
+
+    uint16_t combined_sample = 0x8000 + mixed_samples[sample_counter++];
+    for(auto &chan : Channels)
+    {
+        if (chan.playing) {
+            if (chan.stream_out == chan.stream_in) {
+                if (chan.file_handle != -1) continue;
+                if (!RefillStream(chan)) {
+                    chan.playing = false;
+                    continue;
+                }
+            }
+
+            combined_sample += (chan.stream_samples[chan.stream_out] * chan.volume) >> 15;
+            chan.stream_out = (chan.stream_out + 1) & (STREAM_SAMPLES - 1);
+        }
+    }
+
+    next_sample = combined_sample >> 8;
+    return true;
+}
+
 bool Audio_Init(void * window, int bits_per_sample, bool stereo, int rate, int reverse_channels)
 {
     /*SDL_AudioSpec desired;
@@ -318,19 +378,32 @@ bool Audio_Init(void * window, int bits_per_sample, bool stereo, int rate, int r
     SoundType = SFX_SDL;
     SampleType = SAMPLE_SDL;
     return true;*/
-    return false;
+
+    SoundType = SFX_SDL;
+    SampleType = SAMPLE_SDL;
+
+    int16_t* stream_mem = psram_sample_buffers;
+    for(auto &chan : Channels)
+    {
+        chan.stream_samples = stream_mem;
+        stream_mem += STREAM_SAMPLES;
+    }
+
+    pwm_config c = pwm_get_default_config();
+    pwm_config_set_wrap(&c, 0xfe);
+    pwm_init(PWM_AUDIO_SLICE, &c, true);
+    pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, 0x80);
+    gpio_set_function(PWM_AUDIO_PIN, GPIO_FUNC_PWM);
+
+    add_repeating_timer_us(1000000 / rate, repeating_timer_callback, NULL, &audio_timer);
+
+    return true;
 }
 
 void Sound_End(void)
 {
-    //SDL_CloseAudioDevice(AudioDevice);
-
-    delete[] MixBuffer;
-
-    for(auto &chan : Channels)
-    {
-        //SDL_FreeAudioStream(chan.stream);
-    }
+    cancel_repeating_timer(&audio_timer);
+    pwm_set_chan_level(PWM_AUDIO_SLICE, PWM_AUDIO_CHAN, 0x80);
 }
 
 void Stop_Sample(int handle)
@@ -404,7 +477,8 @@ int Play_Sample_Handle(void const *sample, int priority, int volume, signed shor
     auto &chan = Channels[id];
 
     chan.sample = sample;
-    chan.playing = true;
+    chan.stream_in = 0;
+    chan.stream_out = 0;
     chan.priority = priority;
     chan.raw_volume = volume * 255;
     chan.volume = Calculate_Volume(chan.raw_volume);
@@ -427,6 +501,8 @@ int Play_Sample_Handle(void const *sample, int priority, int volume, signed shor
         chan.step = 0;
         chan.predictor = 0;
     }
+
+    chan.playing = true;
 
     //SDL_UnlockAudioDevice(AudioDevice);
 
@@ -452,18 +528,10 @@ int Set_Score_Vol(int volume)
 
 void Fade_Sample(int handle, int ticks)
 {
-    // recalse from game ticks, to audio callbacks
-    /*int fade_time = (1000 / 60) * ticks;
-    int callback_interval =  ObtainedSpec.samples * 1000 / ObtainedSpec.freq;
-
-    int num_steps = fade_time / callback_interval;
-
     if(Sample_Status(handle))
     {
-        SDL_LockAudioDevice(AudioDevice);
-        Channels[handle].fade = Channels[handle].raw_volume / num_steps;
-        SDL_UnlockAudioDevice(AudioDevice);
-    }*/
+        Channels[handle].fade = Channels[handle].raw_volume / ticks;
+    }
 }
 
 int Get_Free_Sample_Handle(int priority)

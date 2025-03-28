@@ -24,3 +24,7 @@
 #define DVI_D0_P 15
 #define DVI_D1_P 17
 #define DVI_D2_P 19
+
+#define PWM_AUDIO_PIN 40
+#define PWM_AUDIO_SLICE 8
+#define PWM_AUDIO_CHAN 0
